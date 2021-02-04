@@ -1,0 +1,581 @@
+Sub Setup_Config_Log()
+
+    ' Split based on Entity
+    Call Split_Sht_in_Separate_Shts
+
+    ' Loop through all worksheets and set them up
+    Dim ws As Worksheet
+    For Each ws In Sheets
+
+        ' Select the sheet
+        Sheets(ws.Name).Select
+
+        ' Setup Table
+        Call Setup_Table
+
+        ' Data Validations
+        Call Data_Validations
+
+        ' Setup Conditional Formatting
+        Call Conditional_Formatting
+
+        ' Set Sort of table
+        Call Reset_Sort
+
+        ' Set Height/Width of columns
+        Call Set_Width_Height
+
+        ' Setup SQL formula
+        Call formula_SQL
+
+        ' Move cursor back to A1
+        Range("A1").Select
+
+    Next ws
+
+    ' Go back to first sheet
+    Sheets("Candidate").Select
+
+End Sub
+Sub Split_Sht_in_Separate_Shts()
+
+  Const ColumnToMatch As String = "Entity"
+
+  Dim sht As Worksheet
+  Dim LastRow As Long
+  Dim LastColumn As Long
+  Dim StartCell As Range
+  Dim ColNum As Integer
+  Dim sCol As String
+  Dim LastC As String
+  Dim ws As Worksheet, ws1 As Worksheet
+
+  Set sht = ActiveSheet
+  Set StartCell = Range("A1")
+
+  Const FirstC As String = "A" ' First column
+  LastC = VBA_Convert_Number_To_Letter1(sht.Cells(StartCell.Row, sht.Columns.Count).End(xlToLeft).Column) ' Find last column with data
+  sCol = VBA_Convert_Number_To_Letter1(Application.WorksheetFunction.Match(ColumnToMatch, ActiveSheet.Rows(1), 0)) ' Split based on this column
+
+  Set ws = ActiveSheet
+  Dim rng As Range
+  Dim r As Long, c As Long, x As Long, r1 As Long
+
+  Application.ScreenUpdating = False
+
+  r = ws.Range(FirstC & ":" & LastC).Find(What:="*", SearchOrder:=xlByRows, SearchDirection:=xlPrevious).Row
+  c = ws.Cells.Find(What:="*", SearchOrder:=xlByColumns, SearchDirection:=xlPrevious).Column + 2
+  Set rng = ws.Range(ws.Cells(1, FirstC), ws.Cells(r, LastC))
+  ws.Range(sCol & ":" & sCol).Copy
+  ws.Cells(1, c).PasteSpecial xlValues
+  Application.CutCopyMode = False
+  ws.Cells(1, c).Resize(r).RemoveDuplicates Columns:=1, Header:=xlYes
+  r1 = ws.Cells(Rows.Count, c).End(xlUp).Row
+  ws.Cells(1, c).Resize(r1).Sort Key1:=ws.Cells(1, c), Header:=xlYes
+  ws.AutoFilterMode = False
+  Application.DisplayAlerts = False
+  For x = 2 To r1
+    For Each ws1 In Sheets
+      If ws1.Name = ws.Cells(x, c) Then ws1.Delete
+    Next
+  Next
+  Application.DisplayAlerts = True
+
+  For x = 2 To r1
+    ws.Range(ws.Cells(1, sCol), ws.Cells(r, sCol)).AutoFilter Field:=1, Criteria1:=ws.Cells(x, c)
+    Set ws1 = Worksheets.Add(After:=Worksheets(Worksheets.Count))
+    ws1.Name = ws.Cells(x, c).Value
+    rng.SpecialCells(xlCellTypeVisible).Copy
+    Range("A1").PasteSpecial Paste:=xlPasteFormats
+    Range("A1").PasteSpecial Paste:=xlPasteColumnWidths
+    Range("A1").PasteSpecial Paste:=xlPasteValues
+    Application.CutCopyMode = False
+  Next x
+  With ws
+    .AutoFilterMode = False
+    .Cells(1, c).Resize(r).ClearContents
+    .Activate
+    .Range("A1").Select
+  End With
+
+  Application.ScreenUpdating = True
+
+  Application.DisplayAlerts = False
+  sht.Select
+  ActiveWindow.SelectedSheets.Delete
+  Application.DisplayAlerts = True
+
+End Sub
+
+Function VBA_Convert_Number_To_Letter1(ByVal ColNum As Integer) As String
+
+   'Variable Declaration
+   Dim iCnt As Integer
+   Dim jCnt As Integer
+
+   'Calculations
+   iCnt = Int(ColNum / 27)
+   jCnt = ColNum - (iCnt * 26)
+
+   'Check first Condition
+   If iCnt > 0 Then
+      VBA_Convert_Number_To_Letter1 = Chr(iCnt + 64)
+   End If
+
+   'Check second Condition
+   If jCnt > 0 Then
+      VBA_Convert_Number_To_Letter1 = VBA_Convert_Number_To_Letter1 & Chr(jCnt + 64)
+   End If
+
+End Function
+
+Sub Reset_Sort()
+
+    ActiveSheet.ListObjects(1).Sort.SortFields.Clear
+    ActiveSheet.ListObjects(1).Sort.SortFields.Add2 Key:=ActiveSheet.ListObjects(1).ListColumns("Hidden").Range, SortOn:=xlSortOnValues, Order:=xlAscending, CustomOrder:="No,Yes,null", DataOption:=xlSortNormal
+    ActiveSheet.ListObjects(1).Sort.SortFields.Add2 Key:=ActiveSheet.ListObjects(1).ListColumns("Sort").Range, SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
+    ActiveSheet.ListObjects(1).Sort.SortFields.Add2 Key:=ActiveSheet.ListObjects(1).ListColumns("Name").Range, SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
+    With ActiveSheet.ListObjects(1).Sort
+        .Header = xlYes
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+
+End Sub
+Sub Setup_Table()
+    ' Setup table
+        Dim sht As Worksheet
+        Dim LastRow As Long
+        Dim LastColumn As Long
+        Dim StartCell As Range
+
+        Set sht = ActiveSheet
+        Set StartCell = Range("A1")
+
+        ' Find Last Row and Column
+        LastRow = sht.Cells(sht.Rows.Count, StartCell.Column).End(xlUp).Row
+        LastColumn = sht.Cells(StartCell.Row, sht.Columns.Count).End(xlToLeft).Column
+
+        ' Select Range
+        sht.Range(StartCell, sht.Cells(LastRow, LastColumn)).Select
+
+        ' Create table
+        Dim objTable As ListObject
+        Set objTable = ActiveSheet.ListObjects.Add(xlSrcRange, Selection, , xlYes)
+        objTable.Name = ActiveSheet.Name
+
+        ' Replace values with just a single space
+        Selection.Replace What:=" ", Replacement:="", LookAt:=xlWhole, SearchOrder:=xlByRows, MatchCase:=False, SearchFormat:=False, ReplaceFormat:=False
+
+    ' Move cursor back to A1
+    Range("A1").Select
+
+End Sub
+Sub Set_Width_Height()
+
+    ' Default size and alignment
+        ActiveSheet.ListObjects(1).Range.Select
+        With Selection
+            .HorizontalAlignment = xlLeft
+            .VerticalAlignment = xlTop
+            .ColumnWidth = 15
+        End With
+
+        Range("1:1").Select
+        With Selection
+            .RowHeight = 25
+            .HorizontalAlignment = xlCenter
+            .VerticalAlignment = xlCenter
+        End With
+
+    ' Resize columns
+        With ActiveSheet.ListObjects(1)
+        Union(.ListColumns("Sort").DataBodyRange, _
+              .ListColumns("Hidden").DataBodyRange).Select
+        End With
+        Selection.ColumnWidth = 10
+
+        With ActiveSheet.ListObjects(1)
+        Union(.ListColumns("Name").DataBodyRange, _
+              .ListColumns("Label").DataBodyRange, _
+              .ListColumns("Values").DataBodyRange, _
+              .ListColumns("DisplayValues").DataBodyRange, _
+              .ListColumns("Table").DataBodyRange, _
+              .ListColumns("Column").DataBodyRange).Select
+        End With
+        Selection.ColumnWidth = 25
+
+    ' Set Alignment
+        With ActiveSheet.ListObjects(1)
+        Union(.ListColumns("Sort").DataBodyRange, _
+              .ListColumns("Hidden").DataBodyRange, _
+              .ListColumns("Multiple").DataBodyRange, _
+              .ListColumns("Required").DataBodyRange, _
+              .ListColumns("Confidential").DataBodyRange, _
+              .ListColumns("Dropdowns").DataBodyRange, _
+              .ListColumns("Optional").DataBodyRange, _
+              .ListColumns("Migrate").DataBodyRange).Select
+        End With
+        With Selection
+            .HorizontalAlignment = xlCenter
+            .VerticalAlignment = xlTop
+        End With
+
+
+    ' Wrap text
+        With ActiveSheet.ListObjects(1)
+        Union(.ListColumns("Values").DataBodyRange, _
+              .ListColumns("DisplayValues").DataBodyRange, _
+              .ListColumns("Hint").DataBodyRange, _
+              .ListColumns("Description").DataBodyRange, _
+              .ListColumns("Table").DataBodyRange, _
+              .ListColumns("Column").DataBodyRange).Select
+        End With
+        With Selection
+            .WrapText = True
+        End With
+
+    ' Format Column Background
+        Range("A1:N1").Select
+        Selection.Style = "60% - Accent1"
+        Range("O1:T1").Select
+        Selection.Style = "Accent2"
+        Range("U1").Select
+        Selection.Style = "Neutral"
+
+End Sub
+
+Sub Data_Validations()
+
+    ' Require Yes/No
+    ActiveSheet.ListObjects(1).ListColumns("Hidden").Range.Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:= _
+        xlBetween, Formula1:="Yes,No"
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = ""
+        .InputMessage = ""
+        .ErrorMessage = ""
+        .ShowInput = True
+        .ShowError = True
+    End With
+
+    ActiveSheet.ListObjects(1).ListColumns("Multiple").Range.Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:= _
+        xlBetween, Formula1:="Yes,No"
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = ""
+        .InputMessage = ""
+        .ErrorMessage = ""
+        .ShowInput = True
+        .ShowError = True
+    End With
+
+    ActiveSheet.ListObjects(1).ListColumns("Required").Range.Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:= _
+        xlBetween, Formula1:="Yes,No"
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = ""
+        .InputMessage = ""
+        .ErrorMessage = ""
+        .ShowInput = True
+        .ShowError = True
+    End With
+
+    ActiveSheet.ListObjects(1).ListColumns("Confidential").Range.Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:= _
+        xlBetween, Formula1:="Yes,No"
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = ""
+        .InputMessage = ""
+        .ErrorMessage = ""
+        .ShowInput = True
+        .ShowError = True
+    End With
+
+    ActiveSheet.ListObjects(1).ListColumns("Dropdowns").Range.Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:= _
+        xlBetween, Formula1:="Yes,No"
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = ""
+        .InputMessage = ""
+        .ErrorMessage = ""
+        .ShowInput = True
+        .ShowError = True
+    End With
+
+    ActiveSheet.ListObjects(1).ListColumns("Optional").Range.Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:= _
+        xlBetween, Formula1:="Yes,No"
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = ""
+        .InputMessage = ""
+        .ErrorMessage = ""
+        .ShowInput = True
+        .ShowError = True
+    End With
+
+    ActiveSheet.ListObjects(1).ListColumns("Migrate").Range.Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:= _
+        xlBetween, Formula1:="Yes,No"
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = ""
+        .InputMessage = ""
+        .ErrorMessage = ""
+        .ShowInput = True
+        .ShowError = True
+    End With
+
+    ' Require Whole Number
+    ActiveSheet.ListObjects(1).ListColumns("Sort").Range.Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateWholeNumber, AlertStyle:=xlValidAlertStop, _
+        Operator:=xlBetween, Formula1:="0", Formula2:="999999"
+        .IgnoreBlank = False
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = "Whole Number Required"
+        .InputMessage = ""
+        .ErrorMessage = "A whole number is required in this column."
+        .ShowInput = False
+        .ShowError = True
+    End With
+
+    ActiveSheet.ListObjects(1).ListColumns("MaxLength").Range.Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateWholeNumber, AlertStyle:=xlValidAlertStop, _
+        Operator:=xlBetween, Formula1:="0", Formula2:="999999"
+        .IgnoreBlank = False
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = "Whole Number Required"
+        .InputMessage = ""
+        .ErrorMessage = "A whole number is required in this column."
+        .ShowInput = False
+        .ShowError = True
+    End With
+
+    ' Clear Validation on Header Row
+    Rows("1:1").Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateInputOnly, AlertStyle:=xlValidAlertStop, Operator _
+        :=xlBetween
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = ""
+        .InputMessage = ""
+        .ErrorMessage = ""
+        .ShowInput = True
+        .ShowError = True
+    End With
+
+    ' Circle Invalid Data
+    ActiveSheet.CircleInvalid
+
+End Sub
+
+
+Sub Conditional_Formatting()
+
+    ' Clear all conditional formatting before we start
+    Cells.FormatConditions.Delete
+
+    ' Migrate with no table/field defined
+    Columns("R:S").Select
+    Selection.FormatConditions.Add Type:=xlExpression, Formula1:="=AND($Q1=""Yes"",OR(R1="""",S1=""""))"
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = vbMagenta
+        .TintAndShade = 0
+    End With
+
+    ' Shown but migrate is blank
+    Selection.FormatConditions(1).StopIfTrue = False
+    Columns("Q:Q").Select
+    Selection.FormatConditions.Add Type:=xlExpression, Formula1:="=AND($B1=""No"",Q1="""")"
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = vbMagenta
+        .TintAndShade = 0
+    End With
+
+    ' Hidden or Null
+    Selection.FormatConditions(1).StopIfTrue = False
+    Columns("A:N").Select
+    Selection.FormatConditions.Add Type:=xlExpression, Formula1:="=OR($B1=""Yes"",$B1=""null"")"
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .ThemeColor = xlThemeColorDark1
+        .TintAndShade = -0.349986266670736
+    End With
+
+    ' Section Header
+    Selection.FormatConditions(1).StopIfTrue = False
+    Columns("A:N").Select
+    Selection.FormatConditions.Add Type:=xlExpression, Formula1:="=$E1=""Section Header"""
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .ThemeColor = xlThemeColorAccent1
+    End With
+
+    ' Section Header Disable Migrate Area
+    Selection.FormatConditions(1).StopIfTrue = False
+    Columns("O:T").Select
+    Selection.FormatConditions.Add Type:=xlExpression, Formula1:="=$E1=""Section Header"""
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Interior
+        .Color = RGB(153, 153, 153)
+    End With
+
+    ' Different Number of Display and Values
+    Selection.FormatConditions(1).StopIfTrue = False
+    Columns("H:I").Select
+    Selection.FormatConditions.Add Type:=xlExpression, Formula1:="=IF($I1<>"""",LEN(TRIM($I1))-LEN(SUBSTITUTE(TRIM($I1),"","",""""))+1<>LEN(TRIM($H1))-LEN(SUBSTITUTE(TRIM($H1),"","",""""))+1,"""")"
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Interior
+        .Color = vbRed
+    End With
+
+    ' If Dropdown or Picker and no values
+    Selection.FormatConditions(1).StopIfTrue = False
+    Columns("E").Select
+    Selection.FormatConditions.Add Type:=xlExpression, Formula1:="=IF(AND(OR($E1=""Drop Down"",$E1=""Mini Picker""),COUNTA($H1:$I1)=0),TRUE,FALSE)"
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Interior
+        .Color = vbRed
+        .TintAndShade = 0.75
+    End With
+
+    ' If there are values and the field type isn't a Dropdown or Picker
+    Selection.FormatConditions(1).StopIfTrue = False
+    Columns("E").Select
+    Selection.FormatConditions.Add Type:=xlExpression, Formula1:="=IF(AND($E1=""Text"",COUNTA($H1:$I1)>0),TRUE,FALSE)"
+    Selection.FormatConditions(Selection.FormatConditions.Count).SetFirstPriority
+    With Selection.FormatConditions(1).Interior
+        .Color = vbRed
+        .TintAndShade = 0.5
+    End With
+
+    ' Clear formmatting from header
+    Rows("1:1").Select
+    Selection.FormatConditions.Delete
+
+    ' Move cursor back to A1
+    Range("A1").Select
+
+End Sub
+
+Sub formula_SQL()
+
+    ActiveSheet.ListObjects(1).ListColumns("SQL").Range.Select
+    ActiveCell.Offset(1).Select
+    ActiveCell.FormulaR1C1 = "=SUBSTITUTE(SUBSTITUTE(IF([@[Migrate]]=""Yes"",IF([@maxLength]>0,SUBSTITUTE("", <table>.<column> As '<bhFieldName>'"",""<table>.<column>"",""LEFT(<table>.<column>,""&[@maxLength]&"")""),"", <table>.<column> As '<bhFieldName>'""),IF([@optional]=""No"",SUBSTITUTE("", <table>.<column> As '<bhFieldName>'"",""<table>.<column>"",""NULL""),"""")),""<bhFieldName>"",[@Name]),""<table>.<column>"",[@Table]&"".""&[@Column])"
+    Range("U3").Select
+
+End Sub
+
+Sub CombineAndSaveAsCSV()
+
+    Dim wrk As Workbook 'Workbook object - Always good to work with object variables
+    Dim sht As Worksheet 'Object for handling worksheets in loop
+    Dim trg As Worksheet 'Combined Worksheet
+    Dim rng As Range 'Range object
+    Dim colCount As Integer 'Column count in tables in the worksheets
+
+    Set wrk = ActiveWorkbook 'Working in active workbook
+
+    For Each sht In wrk.Worksheets
+        If sht.Name = "Combined" Then
+            MsgBox "There is a worksheet called as 'Combined'." & vbCrLf & _
+            "Please remove or rename this worksheet since 'Combined' would be" & _
+            "the name of the result worksheet of this process.", vbOKOnly + vbExclamation, "Error"
+            Exit Sub
+        End If
+    Next sht
+
+     'We don't want screen updating
+    Application.ScreenUpdating = False
+
+     'Add new worksheet as the last worksheet
+    Set trg = wrk.Worksheets.Add(After:=wrk.Worksheets(wrk.Worksheets.Count))
+     'Rename the new worksheet
+    trg.Name = "Combined"
+     'Get column headers from the first worksheet
+     'Column count first
+    Set sht = wrk.Worksheets(1)
+    colCount = sht.Cells(1, 255).End(xlToLeft).Column
+     'Now retrieve headers, no copy&paste needed
+    With trg.Cells(1, 1).Resize(1, colCount)
+        .Value = sht.Cells(1, 1).Resize(1, colCount).Value
+         'Set font as bold
+        .Font.Bold = True
+    End With
+
+     'We can start loop
+    For Each sht In wrk.Worksheets
+         'If worksheet in loop is the last one, stop execution (it is Combined worksheet)
+        If sht.Index = wrk.Worksheets.Count Then
+            Exit For
+        End If
+         'Data range in worksheet - starts from second row as first rows are the header rows in all worksheets
+        Set rng = sht.Range(sht.Cells(2, 1), sht.Cells(65536, 1).End(xlUp).Resize(, colCount))
+         'Put data into the Combined worksheet
+        trg.Cells(65536, 1).End(xlUp).Offset(1).Resize(rng.Rows.Count, rng.Columns.Count).Value = rng.Value
+    Next sht
+     'Fit the columns in Combined worksheet
+    trg.Columns.AutoFit
+
+     'Screen updating should be activated
+    Application.ScreenUpdating = True
+
+    ' Prompt to save
+    Sheets("Combined").Select
+    Sheets("Combined").Move
+    varResult = Application.GetSaveAsFilename
+    ActiveWorkbook.SaveAs Filename:=varResult, FileFormat:=xlCSV, CreateBackup:=False
+
+End Sub
+
+Sub SaveAsCSV()
+
+    varResult = Application.GetSaveAsFilename
+    ActiveWorkbook.SaveAs Filename:=varResult, FileFormat:=xlCSV, CreateBackup:=False
+
+End Sub
+
